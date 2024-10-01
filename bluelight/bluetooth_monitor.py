@@ -5,7 +5,7 @@ import subprocess
 import logging
 from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
-from dbus_next import BusType, Variant
+from dbus_next import BusType
 
 
 BLUEZ_SERVICE_NAME = "org.bluez"
@@ -16,7 +16,8 @@ DBUS_PROPERTIES = "org.freedesktop.DBus.Properties"
 
 async def get_managed_objects(bus):
     """Returns all managed objects."""
-    proxy = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, "/", None)
+    introspection = await bus.introspect('org.bluez', '/')
+    proxy = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, "/", introspection)
     managed_objects = await proxy.get_interface(OBJECT_MANAGER_INTERFACE).call_get_managed_objects()
     return managed_objects
 
