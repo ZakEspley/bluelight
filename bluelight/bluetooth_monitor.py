@@ -25,6 +25,7 @@ async def pair_new_controller():
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
     # Get all managed objects and identify the Bluetooth adapter
+    introspection = await bus.introspect('org.bluez', '/')
     managed_objects = await get_managed_objects(bus)
     adapter_path = None
     for path, interfaces in managed_objects.items():
@@ -37,7 +38,7 @@ async def pair_new_controller():
         return
 
     # Start discovery on the adapter
-    adapter = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, None).get_interface(ADAPTER_INTERFACE)
+    adapter = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, introspection).get_interface(ADAPTER_INTERFACE)
     await adapter.call_start_discovery()
     print("Discovery started...")
 
