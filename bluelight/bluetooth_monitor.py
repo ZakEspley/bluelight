@@ -5,6 +5,7 @@ import subprocess
 import logging
 from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
+from dbus_next import BusType, Variant
 
 
 BLUEZ_SERVICE_NAME = "org.bluez"
