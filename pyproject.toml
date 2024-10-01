@@ -10,6 +10,8 @@ python = "^3.8"
 typer = "^0.12.5"
 dbus-next = "^0.2.3"
 
+[tool.poetry.scripts]
+bluelight = "bluelight.main:app"
 
 [build-system]
 requires = ["poetry-core"]
