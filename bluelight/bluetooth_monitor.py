@@ -4,7 +4,8 @@ import asyncio
 from bluelight.config import load_config
 import subprocess
 from dbus_next.aio import MessageBus
-from dbus_next.constants import MessageType
+from dbus_next import BusType
+from dbus_next.constants import NameFlag
 
 async def monitor_bluetooth():
     """
@@ -18,21 +19,22 @@ async def monitor_bluetooth():
     connected_devices = set()
 
     # Connect to the system bus
-    bus = await MessageBus(bus_type=MessageBus.TYPE_SYSTEM).connect()
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
-    # Get a proxy object for the BlueZ service
-    introspection = await bus.introspect('org.bluez', '/org/bluez/hci0')
-    obj = bus.get_proxy_object('org.bluez', '/org/bluez/hci0', introspection)
-    adapter = obj.get_interface('org.bluez.Adapter1')
+    # Obtain the BlueZ object manager interface
+    introspection = await bus.introspect('org.bluez', '/')
+    obj = bus.get_proxy_object('org.bluez', '/', introspection)
+    obj_manager = obj.get_interface('org.freedesktop.DBus.ObjectManager')
 
-    # Define signal handlers for interfaces added and removed
-    async def interfaces_added(path, interfaces):
+    # Define signal handlers for InterfacesAdded and InterfacesRemoved
+    def interfaces_added(path, interfaces):
         """
         Handler for when a new interface is added.
         """
         device_props = interfaces.get('org.bluez.Device1')
         if device_props:
-            mac_address = device_props.get('Address')
+            # Get the MAC address of the connected device
+            mac_address = device_props.get('Address').value
             if mac_address in config['devices']:
                 # Start moonlight-qt with optional arguments
                 args = config['devices'][mac_address].get('args', '')
@@ -40,41 +42,44 @@ async def monitor_bluetooth():
                 connected_devices.add(mac_address)
                 print(f"Device connected: {mac_address}")
 
-    async def interfaces_removed(path, interfaces):
+    def interfaces_removed(path, interfaces):
         """
         Handler for when an interface is removed.
         """
         if 'org.bluez.Device1' in interfaces:
             # Extract the MAC address from the device path
-            mac_address = path.rsplit('/', 1)[-1].replace('_', ':')
+            mac_address = path.split('/')[-1].replace('dev_', '').replace('_', ':')
             if mac_address in connected_devices:
                 # Wait for the optional timeout before closing moonlight-qt
                 timeout = config.get('timeout', 0)
-                await asyncio.sleep(timeout)
-                subprocess.Popen("pkill moonlight-qt", shell=True)
+                asyncio.create_task(disconnect_device(mac_address, timeout))
                 connected_devices.remove(mac_address)
                 print(f"Device disconnected: {mac_address}")
 
-    # Add signal listeners for InterfacesAdded and InterfacesRemoved
-    bus.add_message_handler(lambda msg: asyncio.create_task(
-        handle_signals(msg, interfaces_added, interfaces_removed)
-    ))
+    async def disconnect_device(mac_address, timeout):
+        """
+        Waits for the specified timeout and then kills moonlight-qt.
+        """
+        await asyncio.sleep(timeout)
+        subprocess.Popen("pkill moonlight-qt", shell=True)
 
-    # Keep the program running
+    # Connect signal handlers
+    obj_manager.on_interfaces_added(interfaces_added)
+    obj_manager.on_interfaces_removed(interfaces_removed)
+
+    # Call GetManagedObjects to initialize the connected devices
+    managed_objects = await obj_manager.call_get_managed_objects()
+
+    # Initialize connected devices
+    for path, interfaces in managed_objects.items():
+        device_props = interfaces.get('org.bluez.Device1')
+        if device_props:
+            connected = device_props.get('Connected').value
+            if connected:
+                mac_address = device_props.get('Address').value
+                if mac_address in config['devices']:
+                    connected_devices.add(mac_address)
+                    print(f"Device already connected: {mac_address}")
+
+    # Keep the program running indefinitely
     await asyncio.Future()  # Run forever
-
-async def handle_signals(message, interfaces_added_handler, interfaces_removed_handler):
-    """
-    Handle D-Bus signals for interface additions and removals.
-    """
-    if message.message_type != MessageType.SIGNAL:
-        return
-
-    if message.member == 'InterfacesAdded':
-        path = message.body[0]
-        interfaces = message.body[1]
-        await interfaces_added_handler(path, interfaces)
-    elif message.member == 'InterfacesRemoved':
-        path = message.body[0]
-        interfaces = message.body[1]
-        await interfaces_removed_handler(path, interfaces)
