@@ -12,8 +12,6 @@ from dbus_next import BusType
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 
-
-
 async def monitor_bluetooth():
     """
     Monitor Bluetooth device connections and disconnections using D-Bus
@@ -37,7 +35,6 @@ async def monitor_bluetooth():
 
     # Initialize connected devices and start moonlight-qt if necessary
     for path, interfaces in managed_objects.items():
-        
         device_props = interfaces.get('org.bluez.Device1')
         if device_props:
             connected = device_props.get('Connected').value
@@ -48,17 +45,20 @@ async def monitor_bluetooth():
                 # Start moonlight-qt for the already connected device
                 args = config['devices'][mac_address].get('args', '')
                 try:
-                    subprocess.Popen(f"moonlight-qt {args}", shell=True, env=os.environ.copy())
+                    subprocess.Popen(f"moonlight-qt {args}", shell=True)
                     logger.info(f"Started moonlight-qt for device {mac_address}")
                 except Exception as e:
                     logger.exception(f"Failed to start moonlight-qt: {e}")
 
     # Define signal handler for PropertiesChanged
-    def properties_changed(interface, changed, invalidated, path):
-        if interface != 'org.bluez.Device1':
+    def properties_changed(interface_name, changed_properties, invalidated_properties, **kwargs):
+        if interface_name != 'org.bluez.Device1':
             return
 
-        logger.debug(f"PropertiesChanged on {path}: {changed}")
+        message = kwargs['message']
+        path = message.path
+
+        logger.debug(f"PropertiesChanged on {path}: {changed_properties}")
 
         # Extract the MAC address from the device path
         mac_address = path.split('/')[-1].replace('dev_', '').replace('_', ':').upper()
@@ -66,8 +66,8 @@ async def monitor_bluetooth():
             return
 
         # Check if 'Connected' property has changed
-        if 'Connected' in changed:
-            connected = changed['Connected'].value
+        if 'Connected' in changed_properties:
+            connected = changed_properties['Connected'].value
             if connected:
                 # Device connected
                 if mac_address not in connected_devices:
@@ -75,7 +75,7 @@ async def monitor_bluetooth():
                     logger.info(f"Device connected: {mac_address}")
                     args = config['devices'][mac_address].get('args', '')
                     try:
-                        subprocess.Popen(f"moonlight-qt {args}", shell=True, env=os.environ)
+                        subprocess.Popen(f"moonlight-qt {args}", shell=True)
                         logger.info(f"Started moonlight-qt for device {mac_address}")
                     except Exception as e:
                         logger.exception(f"Failed to start moonlight-qt: {e}")
@@ -99,17 +99,14 @@ async def monitor_bluetooth():
         except Exception as e:
             logger.exception(f"Failed to kill moonlight-qt: {e}")
 
-    # Add signal handler for PropertiesChanged
-    def signal_handler(message):
-        if message.member != 'PropertiesChanged':
-            return
-        interface = message.body[0]
-        changed_properties = message.body[1]
-        invalidated_properties = message.body[2]
-        path = message.path
-        properties_changed(interface, changed_properties, invalidated_properties, path)
-
-    bus.add_message_handler(signal_handler)
+    # Subscribe to PropertiesChanged signals for org.bluez.Device1
+    bus.subscribe(
+        sender='org.bluez',
+        interface='org.freedesktop.DBus.Properties',
+        member='PropertiesChanged',
+        arg0='org.bluez.Device1',
+        signal_fired=properties_changed
+    )
 
     logger.info("Bluetooth monitor started, waiting for device connections...")
     # Keep the program running indefinitely
