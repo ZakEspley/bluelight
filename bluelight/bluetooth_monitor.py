@@ -6,6 +6,7 @@ import logging
 from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
 from dbus_next import BusType
+import typer
 
 
 BLUEZ_SERVICE_NAME = "org.bluez"
@@ -25,7 +26,6 @@ async def pair_new_controller():
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
     # Get all managed objects and identify the Bluetooth adapter
-    introspection = await bus.introspect('org.bluez', '/')
     managed_objects = await get_managed_objects(bus)
     adapter_path = None
     for path, interfaces in managed_objects.items():
@@ -38,30 +38,49 @@ async def pair_new_controller():
         return
 
     # Start discovery on the adapter
-    adapter = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, introspection).get_interface(ADAPTER_INTERFACE)
+    introspection = await bus.introspect(BLUEZ_SERVICE_NAME, adapter_path)
+    adapter = bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, introspection).get_interface(ADAPTER_INTERFACE)
     await adapter.call_start_discovery()
     print("Discovery started...")
 
-    # Wait for device discovery and pair the first available device
-    device_path = None
-    async for path, interfaces in get_managed_objects(bus).items():
-        if DEVICE_INTERFACE in interfaces:
-            device_path = path
-            break
+    # List available devices
+    available_devices = {}
+    print("Searching for devices...")
+    await asyncio.sleep(5)  # Give some time for devices to be discovered
+    managed_objects = await get_managed_objects(bus)
 
-    if not device_path:
+    for path, interfaces in managed_objects.items():
+        if DEVICE_INTERFACE in interfaces:
+            device_properties = interfaces[DEVICE_INTERFACE]
+            device_name = device_properties.get("Name", "Unknown Device")
+            available_devices[path] = device_name
+            print(f"Found device: {device_name} ({path})")
+
+    if not available_devices:
         print("No devices found.")
         await adapter.call_stop_discovery()
         return
 
-    # Pair the device
-    device = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, device_path, None).get_interface(DEVICE_INTERFACE)
-    await device.call_pair()
-    await device.call_trust()
-    print(f"Device paired and trusted: {device_path}")
+    # Use Typer to let the user select a device
+    selected_device_path = typer.prompt(f"Select a device path to pair from the following options: {list(available_devices.values())}")
+    if selected_device_path not in available_devices.keys():
+        print("Invalid selection.")
+        await adapter.call_stop_discovery()
+        return
 
-    # Update the allowed devices in config
-    device_properties = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, device_path, None).get_interface(DBUS_PROPERTIES)
+    # Pair the selected device
+    device = bus.get_proxy_object(BLUEZ_SERVICE_NAME, selected_device_path, introspection).get_interface(DEVICE_INTERFACE)
+    try:
+        await device.call_pair()
+        await device.call_trust()
+        print(f"Device paired and trusted: {selected_device_path}")
+    except InterfaceNotFoundError as e:
+        print(f"Error pairing device: {e}")
+        await adapter.call_stop_discovery()
+        return
+
+    # Get the device address and update the config
+    device_properties = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, selected_device_path, introspection).get_interface(DBUS_PROPERTIES)
     device_address = (await device_properties.call_get(DEVICE_INTERFACE, "Address")).value
     update_allowed_devices(device_address)
 
