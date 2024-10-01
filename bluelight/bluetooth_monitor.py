@@ -22,10 +22,6 @@ async def monitor_bluetooth():
     # Load configuration settings
     config = load_config()
 
-    # Set DISPLAY environment variable if necessary
-    os.environ['DISPLAY'] = ':0'  # Adjust if your display is different
-    os.environ['XAUTHORITY'] = '/home/pi/.Xauthority'  # Adjust the path if necessary
-
     # Connect to the system bus
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
 
