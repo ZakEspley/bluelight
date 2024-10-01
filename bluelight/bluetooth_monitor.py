@@ -18,7 +18,7 @@ async def get_managed_objects(bus):
     """Returns all managed objects."""
     introspection = await bus.introspect('org.bluez', '/')
     proxy = bus.get_proxy_object(BLUEZ_SERVICE_NAME, "/", introspection)
-    managed_objects = proxy.get_interface(OBJECT_MANAGER_INTERFACE).call_get_managed_objects()
+    managed_objects = await proxy.get_interface(OBJECT_MANAGER_INTERFACE).call_get_managed_objects()
     return managed_objects
 
 async def pair_new_controller():
