@@ -3,7 +3,7 @@
 import typer
 import asyncio
 from bluelight.config import load_config, save_config
-from bluelight.bluetooth_monitor import monitor_bluetooth
+from bluelight.bluetooth_monitor import monitor_bluetooth, pair_new_controller
 
 # Create a Typer application instance
 app = typer.Typer()
@@ -40,6 +40,15 @@ def set_timeout(seconds: int):
     # Save the updated configuration
     save_config(config)
     typer.echo(f"Set timeout to {seconds} seconds")
+
+@app.command()
+def pair():
+    """
+    Puts the application into pairing mode to pair new controllers.
+    """
+    typer.echo("Entering pairing mode. Please make your controller discoverable.")
+    asyncio.run(pair_new_controller())
+    typer.echo("Pairing mode complete.")
 
 @app.command()
 def run():
