@@ -7,6 +7,7 @@ from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
 from dbus_next import BusType
 import typer
+from rich.prompt import IntPrompt
 
 
 BLUEZ_SERVICE_NAME = "org.bluez"
@@ -34,48 +35,56 @@ async def pair_new_controller():
             break
 
     if not adapter_path:
-        print("No Bluetooth adapter found.")
+        print("[bold red]No Bluetooth adapter found.[/bold red]")
         return
 
     # Start discovery on the adapter
     introspection = await bus.introspect(BLUEZ_SERVICE_NAME, adapter_path)
     adapter = bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, introspection).get_interface(ADAPTER_INTERFACE)
     await adapter.call_start_discovery()
-    print("Discovery started...")
+    print("[bold green]Discovery started...[/bold green]")
 
-    # List available devices
+    # List available devices with index numbers for user selection
     available_devices = {}
-    print("Searching for devices...")
+    print("[bold blue]Searching for devices...[/bold blue]")
     await asyncio.sleep(5)  # Give some time for devices to be discovered
     managed_objects = await get_managed_objects(bus)
 
+    index = 1
     for path, interfaces in managed_objects.items():
         if DEVICE_INTERFACE in interfaces:
             device_properties = interfaces[DEVICE_INTERFACE]
             device_name = device_properties.get("Name", "Unknown Device")
-            available_devices[path] = device_name
-            print(f"Found device: {device_name} ({path})")
+            available_devices[index] = (path, device_name)
+            print(f"[bold yellow]{index}[/bold yellow]: {device_name} ({path})")
+            index += 1
 
     if not available_devices:
-        print("No devices found.")
+        print("[bold red]No devices found.[/bold red]")
         await adapter.call_stop_discovery()
         return
 
-    # Use Typer to let the user select a device
-    selected_device_path = typer.prompt(f"Select a device path to pair from the following options: {list(available_devices.values())}")
-    if selected_device_path not in available_devices.keys():
-        print("Invalid selection.")
+    # Use rich.IntPrompt to let the user select a device by index
+    selected_index = IntPrompt.ask(f"Select a device to pair by entering the index number (1-{len(available_devices)}):")
+
+    # Validate selection
+    if selected_index not in available_devices:
+        print("[bold red]Invalid selection.[/bold red]")
         await adapter.call_stop_discovery()
         return
+
+    # Retrieve the selected device path and name
+    selected_device_path, selected_device_name = available_devices[selected_index]
+    print(f"[bold green]You selected: {selected_device_name}[/bold green]")
 
     # Pair the selected device
     device = bus.get_proxy_object(BLUEZ_SERVICE_NAME, selected_device_path, introspection).get_interface(DEVICE_INTERFACE)
     try:
         await device.call_pair()
         await device.call_trust()
-        print(f"Device paired and trusted: {selected_device_path}")
+        print(f"[bold green]Device paired and trusted: {selected_device_path}[/bold green]")
     except InterfaceNotFoundError as e:
-        print(f"Error pairing device: {e}")
+        print(f"[bold red]Error pairing device: {e}[/bold red]")
         await adapter.call_stop_discovery()
         return
 
@@ -86,7 +95,7 @@ async def pair_new_controller():
 
     # Stop discovery
     await adapter.call_stop_discovery()
-    print("Discovery stopped.")
+    print("[bold green]Discovery stopped.[/bold green]")
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
