@@ -3,9 +3,68 @@
 import asyncio
 import subprocess
 import logging
-from bluelight.config import load_config
+from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
-from dbus_next import BusType
+
+
+BLUEZ_SERVICE_NAME = "org.bluez"
+ADAPTER_INTERFACE = "org.bluez.Adapter1"
+DEVICE_INTERFACE = "org.bluez.Device1"
+OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
+DBUS_PROPERTIES = "org.freedesktop.DBus.Properties"
+
+async def get_managed_objects(bus):
+    """Returns all managed objects."""
+    proxy = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, "/", None)
+    managed_objects = await proxy.get_interface(OBJECT_MANAGER_INTERFACE).call_get_managed_objects()
+    return managed_objects
+
+async def pair_new_controller():
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+
+    # Get all managed objects and identify the Bluetooth adapter
+    managed_objects = await get_managed_objects(bus)
+    adapter_path = None
+    for path, interfaces in managed_objects.items():
+        if ADAPTER_INTERFACE in interfaces:
+            adapter_path = path
+            break
+
+    if not adapter_path:
+        print("No Bluetooth adapter found.")
+        return
+
+    # Start discovery on the adapter
+    adapter = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, None).get_interface(ADAPTER_INTERFACE)
+    await adapter.call_start_discovery()
+    print("Discovery started...")
+
+    # Wait for device discovery and pair the first available device
+    device_path = None
+    async for path, interfaces in get_managed_objects(bus).items():
+        if DEVICE_INTERFACE in interfaces:
+            device_path = path
+            break
+
+    if not device_path:
+        print("No devices found.")
+        await adapter.call_stop_discovery()
+        return
+
+    # Pair the device
+    device = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, device_path, None).get_interface(DEVICE_INTERFACE)
+    await device.call_pair()
+    await device.call_trust()
+    print(f"Device paired and trusted: {device_path}")
+
+    # Update the allowed devices in config
+    device_properties = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, device_path, None).get_interface(DBUS_PROPERTIES)
+    device_address = (await device_properties.call_get(DEVICE_INTERFACE, "Address")).value
+    update_allowed_devices(device_address)
+
+    # Stop discovery
+    await adapter.call_stop_discovery()
+    print("Discovery stopped.")
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
