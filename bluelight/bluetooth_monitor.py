@@ -12,6 +12,8 @@ from dbus_next import BusType
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
 logger = logging.getLogger(__name__)
 
+
+
 async def monitor_bluetooth():
     """
     Monitor Bluetooth device connections and disconnections using D-Bus
@@ -22,6 +24,7 @@ async def monitor_bluetooth():
 
     # Set DISPLAY environment variable if necessary
     os.environ['DISPLAY'] = ':0'  # Adjust if your display is different
+    os.environ['XAUTHORITY'] = '/home/pi/.Xauthority'  # Adjust the path if necessary
 
     # Connect to the system bus
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
@@ -38,6 +41,7 @@ async def monitor_bluetooth():
 
     # Initialize connected devices and start moonlight-qt if necessary
     for path, interfaces in managed_objects.items():
+        
         device_props = interfaces.get('org.bluez.Device1')
         if device_props:
             connected = device_props.get('Connected').value
@@ -48,7 +52,7 @@ async def monitor_bluetooth():
                 # Start moonlight-qt for the already connected device
                 args = config['devices'][mac_address].get('args', '')
                 try:
-                    subprocess.Popen(f"moonlight-qt {args}", shell=True, env=os.environ)
+                    subprocess.Popen(f"moonlight-qt {args}", shell=True, env=os.environ.copy())
                     logger.info(f"Started moonlight-qt for device {mac_address}")
                 except Exception as e:
                     logger.exception(f"Failed to start moonlight-qt: {e}")
