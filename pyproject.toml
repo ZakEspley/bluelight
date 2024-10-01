@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "bluelight"
+version = "0.1.0"
+description = "This program let's you setup your Raspberry Pi to run moonlight-qt automatically when connecting a controller over bluetooth."
+authors = ["Zak Espley <zespley@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+typer = "^0.12.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
