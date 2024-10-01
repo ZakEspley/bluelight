@@ -3,10 +3,10 @@
 import asyncio
 import subprocess
 import logging
-import os
 from bluelight.config import load_config
 from dbus_next.aio import MessageBus
 from dbus_next import BusType
+from dbus_next.constants import MessageType
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
@@ -50,13 +50,24 @@ async def monitor_bluetooth():
                 except Exception as e:
                     logger.exception(f"Failed to start moonlight-qt: {e}")
 
-    # Define signal handler for PropertiesChanged
-    def properties_changed(interface_name, changed_properties, invalidated_properties, **kwargs):
-        if interface_name != 'org.bluez.Device1':
+    # Define the message handler for PropertiesChanged signals
+    def message_handler(message):
+        if message.message_type != MessageType.SIGNAL:
+            return
+        if message.interface != 'org.freedesktop.DBus.Properties':
+            return
+        if message.member != 'PropertiesChanged':
+            return
+        if len(message.body) != 3:
             return
 
-        message = kwargs['message']
+        interface_name = message.body[0]
+        changed_properties = message.body[1]
+        # invalidated_properties = message.body[2]
         path = message.path
+
+        if interface_name != 'org.bluez.Device1':
+            return
 
         logger.debug(f"PropertiesChanged on {path}: {changed_properties}")
 
@@ -99,14 +110,8 @@ async def monitor_bluetooth():
         except Exception as e:
             logger.exception(f"Failed to kill moonlight-qt: {e}")
 
-    # Subscribe to PropertiesChanged signals for org.bluez.Device1
-    bus.subscribe(
-        sender='org.bluez',
-        interface='org.freedesktop.DBus.Properties',
-        member='PropertiesChanged',
-        arg0='org.bluez.Device1',
-        signal_fired=properties_changed
-    )
+    # Add the message handler
+    bus.add_message_handler(message_handler)
 
     logger.info("Bluetooth monitor started, waiting for device connections...")
     # Keep the program running indefinitely
