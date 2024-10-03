@@ -68,7 +68,7 @@ async def monitor_bluetooth():
                         connected_devices.add(mac_address)
                         logger.info(f"Device connected: {mac_address}")
                         try:
-                            subprocess.Popen(f"moonlight-qt", shell=True)
+                            subprocess.Popen(f"moonlight-qt")#, shell=True)
                             logger.info(f"Started moonlight-qt for device {mac_address}")
                         except Exception as e:
                             logger.exception(f"Failed to start moonlight-qt: {e}")
@@ -91,7 +91,7 @@ async def monitor_bluetooth():
         device_props = interfaces.get('org.bluez.Device1')
         if device_props:
             mac_address = device_props.get('Address').value
-            if mac_address in config['devices']:
+            if mac_address in config['allowed_devices']:
                 # Introspect the device
                 device_introspection = await bus.introspect('org.bluez', path)
                 # Create proxy object for the device
@@ -107,7 +107,7 @@ async def monitor_bluetooth():
                     connected_devices.add(mac_address)
                     logger.info(f"Device already connected: {mac_address}")
                     # Start moonlight-qt for the already connected device
-                    args = config['devices'][mac_address].get('args', '')
+                    args = config['allowed_devices'][mac_address].get('args', '')
                     try:
                         subprocess.Popen(f"moonlight-qt {args}", shell=True)
                         logger.info(f"Started moonlight-qt for device {mac_address}")
