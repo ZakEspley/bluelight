@@ -46,7 +46,7 @@ def unpair():
     allowed_devices = config.get("allowed_devices")
     device_list = []
     idx = 1
-    for mac_address, device_info in allowed.items():
+    for mac_address, device_info in allowed_devices.items():
         display_name = device_info["name"]
         manufacturer_name = device_info["manufacturer"]
         device_list.append(mac_address)
