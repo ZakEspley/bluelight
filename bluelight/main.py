@@ -6,7 +6,7 @@ import subprocess
 from bluelight.config import load_config, save_config
 from bluelight.bluetooth_monitor import monitor_bluetooth, pair_new_controller
 from rich.console import Console
-from rich.prompt import IntPrompt
+from rich.prompt import Prompt
 
 # Create a Typer application instance
 app = typer.Typer()
@@ -56,10 +56,11 @@ def unpair():
     console.print(f"[{idx}] [bold red]Quit[/bold red]")
 
     # Use Rich prompt to select a device
-    selected_idx = IntPrompt.ask(
+    selected_idx = Prompt.ask(
         "[bold yellow]Select the device number you want to connect to[/bold yellow]", 
         choices=list(range(idx+1))[1:]
     )
+    selected_idx = int(selected_idx)
 
     if selected_idx == idx:
         console.print("[bold red] Quitting ... [/bold red]")
