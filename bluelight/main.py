@@ -2,31 +2,18 @@
 
 import typer
 import asyncio
+import subprocess
 from bluelight.config import load_config, save_config
 from bluelight.bluetooth_monitor import monitor_bluetooth, pair_new_controller
+from rich.console import Console
+from rich.prompt import IntPrompt
 
 # Create a Typer application instance
 app = typer.Typer()
+console = Console()
 
 @app.command()
-def add_device(mac_address: str, args: str = ""):
-    """
-    Add a new Bluetooth device with optional moonlight-qt arguments.
-
-    Args:
-        mac_address (str): The MAC address of the Bluetooth device.
-        args (str, optional): Additional arguments for moonlight-qt.
-    """
-    # Load existing configuration
-    config = load_config()
-    # Add or update the device entry
-    config["devices"][mac_address] = {"args": args}
-    # Save the updated configuration
-    save_config(config)
-    typer.echo(f"Added device {mac_address} with args '{args}'")
-
-@app.command()
-def set_timeout(seconds: int):
+def timeout(seconds: int):
     """
     Set the timeout before closing moonlight-qt after device disconnection.
 
@@ -49,6 +36,46 @@ def pair():
     typer.echo("Entering pairing mode. Please make your controller discoverable.")
     asyncio.run(pair_new_controller())
     typer.echo("Pairing mode complete.")
+
+@app.command()
+def unpair():
+    """
+    Removes one of the devices from your list.
+    """
+    config = load_config()
+    allowed_devices = config.get("allowed_devices")
+    device_list = []
+    idx = 1
+    for mac_address, device_info in allowed.items():
+        display_name = device_info["name"]
+        manufacturer_name = device_info["manufacturer"]
+        device_list.append(mac_address)
+        console.print(f"[{idx}] {display_name} : {manufacturer_name} : ({mac_address})")
+        idx += 1
+    # Add an option to quit
+    console.print(f"[{idx}] [bold red]Quit[/bold red]")
+
+    # Use Rich prompt to select a device
+    selected_idx = IntPrompt.ask(
+        "[bold yellow]Select the device number you want to connect to[/bold yellow]", 
+        choices=list(range(idx+1))[1:]
+    )
+
+    if selected_idx == idx:
+        console.print("[bold red] Quitting ... [/bold red]")
+        raise typer.Exit()
+    selected_name = allowed_devices[device_list[idx-1]]["name"]
+    selected_manufacturer = allowed_devices[device_list[idx-1]]["manufacturer"]
+    selected_address = allowed_devices[device_list[idx-1]]
+
+
+    console.print(f"[bold orange] Removing device {selected_name} ({selected_address})...[/bold orange]")
+    allowed_devices.pop(selected_address)
+    try:
+        subprocess.run(["bluetoothctl", "remove", selected_address], check=True)
+        console.print(f"[bold green] Device {selected_name} ({selected_address}) has been successfully removed[/bold green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]Failed to remove {selected_device} ({selected_address}). Error: {e}[/bold red]")
 
 @app.command()
 def run():

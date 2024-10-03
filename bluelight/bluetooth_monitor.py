@@ -7,14 +7,23 @@ from bluelight.config import load_config, update_allowed_devices
 from dbus_next.aio import MessageBus
 from dbus_next import BusType
 import typer
-from rich.prompt import IntPrompt
-
+from rich.prompt import Prompt
+from rich.console import Console
+from bluelight.config import load_config, update_allowed_devices
+from bleak import BleakClient, BleakScanner
+import json
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 ADAPTER_INTERFACE = "org.bluez.Adapter1"
 DEVICE_INTERFACE = "org.bluez.Device1"
 OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
 DBUS_PROPERTIES = "org.freedesktop.DBus.Properties"
+
+console = Console()
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
+logger = logging.getLogger(__name__)
 
 async def get_managed_objects(bus):
     """Returns all managed objects."""
@@ -23,83 +32,6 @@ async def get_managed_objects(bus):
     managed_objects = await proxy.get_interface(OBJECT_MANAGER_INTERFACE).call_get_managed_objects()
     return managed_objects
 
-async def pair_new_controller():
-    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-
-    # Get all managed objects and identify the Bluetooth adapter
-    managed_objects = await get_managed_objects(bus)
-    adapter_path = None
-    for path, interfaces in managed_objects.items():
-        if ADAPTER_INTERFACE in interfaces:
-            adapter_path = path
-            break
-
-    if not adapter_path:
-        print("[bold red]No Bluetooth adapter found.[/bold red]")
-        return
-
-    # Start discovery on the adapter
-    introspection = await bus.introspect(BLUEZ_SERVICE_NAME, adapter_path)
-    adapter = bus.get_proxy_object(BLUEZ_SERVICE_NAME, adapter_path, introspection).get_interface(ADAPTER_INTERFACE)
-    await adapter.call_start_discovery()
-    print("[bold green]Discovery started...[/bold green]")
-
-    # List available devices with index numbers for user selection
-    available_devices = {}
-    print("[bold blue]Searching for devices...[/bold blue]")
-    await asyncio.sleep(5)  # Give some time for devices to be discovered
-    managed_objects = await get_managed_objects(bus)
-
-    index = 1
-    for path, interfaces in managed_objects.items():
-        if DEVICE_INTERFACE in interfaces:
-            device_properties = interfaces[DEVICE_INTERFACE]
-            device_name = device_properties.get("Name", "Unknown Device")
-            available_devices[index] = (path, device_name)
-            print(f"[bold yellow]{index}[/bold yellow]: {device_name} ({path})")
-            index += 1
-
-    if not available_devices:
-        print("[bold red]No devices found.[/bold red]")
-        await adapter.call_stop_discovery()
-        return
-
-    # Use rich.IntPrompt to let the user select a device by index
-    selected_index = IntPrompt.ask(f"Select a device to pair by entering the index number (1-{len(available_devices)}):")
-
-    # Validate selection
-    if selected_index not in available_devices:
-        print("[bold red]Invalid selection.[/bold red]")
-        await adapter.call_stop_discovery()
-        return
-
-    # Retrieve the selected device path and name
-    selected_device_path, selected_device_name = available_devices[selected_index]
-    print(f"[bold green]You selected: {selected_device_name}[/bold green]")
-
-    # Pair the selected device
-    device = bus.get_proxy_object(BLUEZ_SERVICE_NAME, selected_device_path, introspection).get_interface(DEVICE_INTERFACE)
-    try:
-        await device.call_pair()
-        await device.call_trust()
-        print(f"[bold green]Device paired and trusted: {selected_device_path}[/bold green]")
-    except InterfaceNotFoundError as e:
-        print(f"[bold red]Error pairing device: {e}[/bold red]")
-        await adapter.call_stop_discovery()
-        return
-
-    # Get the device address and update the config
-    device_properties = await bus.get_proxy_object(BLUEZ_SERVICE_NAME, selected_device_path, introspection).get_interface(DBUS_PROPERTIES)
-    device_address = (await device_properties.call_get(DEVICE_INTERFACE, "Address")).value
-    update_allowed_devices(device_address)
-
-    # Stop discovery
-    await adapter.call_stop_discovery()
-    print("[bold green]Discovery stopped.[/bold green]")
-
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s:%(message)s')
-logger = logging.getLogger(__name__)
 
 async def monitor_bluetooth():
     """
@@ -197,6 +129,96 @@ async def monitor_bluetooth():
     logger.info("Bluetooth monitor started, waiting for device connections...")
     # Keep the program running indefinitely
     await asyncio.Future()  # Run forever
+
+
+def pair_new_controller():
+    """
+    Connect to a wireless Bluetooth controller using Bleak and set the device as trusted.
+    """
+    # Load company identifiers for manufacturer data
+    with open("./company_identifiers.json") as file:
+        COMPANY_IDENTIFIERS = json.load(file)
+    # Convert keys to integers for proper comparison
+    COMPANY_IDENTIFIERS = {int(k): COMPANY_IDENTIFIERS[k] for k in COMPANY_IDENTIFIERS}
+    async def connect():
+        # Start Bluetooth scanning
+        console.print("[bold green]Scanning for Bluetooth devices...[/bold green]")
+        devices = await BleakScanner.discover(return_adv=True)
+
+        if not devices:
+            console.print("[bold red]No Bluetooth devices found. Please ensure the device is in pairing mode.[/bold red]")
+            raise typer.Exit()
+
+        # Create a list of devices with more context using metadata or address as fallback
+        device_list = {}
+        idx = 1
+        for mac_address, (device, advertisement_data) in devices.items():
+            # Extract manufacturer data if available
+            manufacturer_name = "Unknown Manufacturer"
+            if advertisement_data.manufacturer_data:
+                for manufacturer_id in advertisement_data.manufacturer_data:
+                    manufacturer_name = COMPANY_IDENTIFIERS.get(manufacturer_id, "Unknown Manufacturer")
+
+            # Set device name or use "Unknown Device" if name is not available
+            device_name = device.name or "Unknown Device"
+            
+            # Check if device name is the same as the MAC address, which indicates an unknown device
+            if str.join(":",device_name.split("-")) == mac_address:
+                device_name = "Unknown Device"
+
+            # Highlight potential controllers based on device name
+            if "controller" in device_name.lower():
+                display_name = f"[bold green]{device_name}[/bold green]"
+            else:
+                display_name = device_name
+
+            # Store the device information for display and selection
+            device_list[str(idx)] = {
+                "device": device,
+                "name": device_name,
+                "manufacturer": manufacturer_name,
+                "address": mac_address
+            }
+            # Display the device information with index
+            console.print(f"[{idx}] {display_name} : {manufacturer_name} : ({mac_address})")
+            idx += 1
+
+        # Add an option to quit
+        console.print(f"[{idx}] [bold red]Quit[/bold red] (Run again to rescan)")
+
+        # Use Rich prompt to select a device
+        selected_idx = Prompt.ask(
+            "[bold yellow]Select the device number you want to connect to[/bold yellow]", 
+            choices=list(device_list.keys()) + [str(idx)]
+        )
+
+        if selected_idx == str(idx):
+            console.print("[bold red]Quitting...[/bold red]")
+            raise typer.Exit()
+
+        # Get selected device information
+        selected_device = device_list[selected_idx]
+        console.print(f"[bold green]Connecting to {selected_device['name']} ({selected_device['address']})...[/bold green]")
+
+        # Attempt to connect to the selected device
+        async with BleakClient(selected_device['address']) as client:
+            if client.is_connected:
+                console.print(f"[bold green]Successfully connected to {selected_device['name']}![/bold green]")
+
+                # Mark the device as trusted using `bluetoothctl`
+                try:
+                    console.print(f"[bold green]Setting {selected_device['address']} as a trusted device...[/bold green]")
+                    # Run `bluetoothctl` command to set device as trusted
+                    subprocess.run(["bluetoothctl", "trust", selected_device['address']], check=True)
+                    console.print(f"[bold green]Device {selected_device['address']} is now trusted![/bold green]")
+                    update_allowed_devices(selected_device['address'], selected_device['name'], selected_device['manufacturer'])
+                except subprocess.CalledProcessError as e:
+                    console.print(f"[bold red]Failed to set {selected_device['address']} as trusted. Error: {e}[/bold red]")
+            else:
+                console.print(f"[bold red]Failed to connect to {selected_device['name']}.[/bold red]")
+
+    # Run the connection function
+    asyncio.run(connect())
 
 if __name__ == '__main__':
     asyncio.run(monitor_bluetooth())

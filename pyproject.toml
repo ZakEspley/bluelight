@@ -4,11 +4,15 @@ version = "0.1.0"
 description = "This program let's you setup your Raspberry Pi to run moonlight-qt automatically when connecting a controller over bluetooth."
 authors = ["Zak Espley <zespley@gmail.com>"]
 readme = "README.md"
+include = [
+    {path = "company_identifiers.json", format = ["sdist", "wheel"]}
+]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.11,<3.13"
 typer = "^0.12.5"
 dbus-next = "^0.2.3"
+bleak = "^0.22.2"
 
 [tool.poetry.scripts]
 bluelight = "bluelight.main:app"
