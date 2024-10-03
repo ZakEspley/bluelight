@@ -218,7 +218,7 @@ async def pair_new_controller():
                 console.print(f"[bold red]Failed to connect to {selected_device['name']}.[/bold red]")
 
     # Run the connection function
-    asyncio.run(connect())
+    await connect()
 
 if __name__ == '__main__':
     asyncio.run(monitor_bluetooth())
