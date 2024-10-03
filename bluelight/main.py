@@ -58,15 +58,15 @@ def unpair():
     # Use Rich prompt to select a device
     selected_idx = Prompt.ask(
         "[bold yellow]Select the device number you want to connect to[/bold yellow]", 
-        choices=list(range(idx+1))[1:]
+        choices= [str(i+1) for i in range(idx)]
     )
     selected_idx = int(selected_idx)
 
     if selected_idx == idx:
         console.print("[bold red] Quitting ... [/bold red]")
         raise typer.Exit()
-    selected_name = allowed_devices[device_list[idx-1]]["name"]
-    selected_address = allowed_devices[device_list[idx-1]]
+    selected_name = allowed_devices[device_list[selected_idx-1]]["name"]
+    selected_address = device_list[selected_idx-1]
 
 
     console.print(f"[bold orange] Removing device {selected_name} ({selected_address})...[/bold orange]")
