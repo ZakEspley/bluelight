@@ -65,7 +65,6 @@ def unpair():
         console.print("[bold red] Quitting ... [/bold red]")
         raise typer.Exit()
     selected_name = allowed_devices[device_list[idx-1]]["name"]
-    selected_manufacturer = allowed_devices[device_list[idx-1]]["manufacturer"]
     selected_address = allowed_devices[device_list[idx-1]]
 
 

@@ -131,7 +131,7 @@ async def monitor_bluetooth():
     await asyncio.Future()  # Run forever
 
 
-def pair_new_controller():
+async def pair_new_controller():
     """
     Connect to a wireless Bluetooth controller using Bleak and set the device as trusted.
     """

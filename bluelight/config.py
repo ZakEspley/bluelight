@@ -29,18 +29,18 @@ def update_allowed_devices(device_address: str, name: str, manufacturer: str):
     config = load_config()
     allowed_devices = config.get('allowed_devices', [])
 
-        # Add the new device if it's not already in the list
-        if device_address not in allowed_devices.keys():
-            new_device = {
-                "name": name,
-                "manufacturer": manufacturer
-            }
-            allowed_devices[device_address] = new_device
-            config['allowed_devices'] = allowed_devices
+    # Add the new device if it's not already in the list
+    if device_address not in allowed_devices.keys():
+        new_device = {
+            "name": name,
+            "manufacturer": manufacturer
+        }
+        allowed_devices[device_address] = new_device
+        config['allowed_devices'] = allowed_devices
 
-            # Write back to the config file
-            config_file.seek(0)
-            json.dump(config, config_file, indent=4)
-            config_file.truncate()
+        # Write back to the config file
+        save_config(config)
 
     print(f"Device {device_address} added to allowed devices.")
+
+    
