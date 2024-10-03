@@ -26,9 +26,8 @@ def save_config(config):
         json.dump(config, f, indent=4)
 
 def update_allowed_devices(device_address: str, name: str, manufacturer: str):
-    with open(CONFIG_FILE, 'r+') as config_file:
-        config = json.load(config_file)
-        allowed_devices = config.get('allowed_devices', [])
+    config = load_config()
+    allowed_devices = config.get('allowed_devices', [])
 
         # Add the new device if it's not already in the list
         if device_address not in allowed_devices.keys():
