@@ -107,9 +107,8 @@ async def monitor_bluetooth():
                     connected_devices.add(mac_address)
                     logger.info(f"Device already connected: {mac_address}")
                     # Start moonlight-qt for the already connected device
-                    args = config['allowed_devices'][mac_address].get('args', '')
                     try:
-                        subprocess.Popen(f"moonlight-qt {args}", shell=True)
+                        subprocess.Popen(f"moonlight-qt")
                         logger.info(f"Started moonlight-qt for device {mac_address}")
                     except Exception as e:
                         logger.exception(f"Failed to start moonlight-qt: {e}")
