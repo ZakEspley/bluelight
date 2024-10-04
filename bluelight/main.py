@@ -46,6 +46,9 @@ def unpair():
     allowed_devices = config.get("allowed_devices")
     device_list = []
     idx = 1
+    if len(allowed_devices.items()) == 0:
+        console.print("[bold red]No devices saved. Run the command [italic]bluelight pair[/italic] to pair a controller[/bold red]")
+        raise typer.Exit()
     for mac_address, device_info in allowed_devices.items():
         display_name = device_info["name"]
         manufacturer_name = device_info["manufacturer"]
@@ -74,8 +77,11 @@ def unpair():
     try:
         subprocess.run(["bluetoothctl", "remove", selected_address], check=True)
         console.print(f"[bold green] Device {selected_name} ({selected_address}) has been successfully removed[/bold green]")
+        config["allowed_devices"] = allowed_devices
+        save_config(config)
     except subprocess.CalledProcessError as e:
-        console.print(f"[bold red]Failed to remove {selected_device} ({selected_address}). Error: {e}[/bold red]")
+        console.print(f"[bold red]Failed to remove {selected_name} ({selected_address}). Error: {e}[/bold red]")
+    
 
 @app.command()
 def run():

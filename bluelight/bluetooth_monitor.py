@@ -12,6 +12,7 @@ from rich.console import Console
 from bluelight.config import load_config, update_allowed_devices
 from bleak import BleakClient, BleakScanner
 import json
+from importlib import resources
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 ADAPTER_INTERFACE = "org.bluez.Adapter1"
@@ -134,7 +135,7 @@ async def pair_new_controller():
     Connect to a wireless Bluetooth controller using Bleak and set the device as trusted.
     """
     # Load company identifiers for manufacturer data
-    with open("./company_identifiers.json") as file:
+    with resources.open_text("bluelight", "company_identifiers.json") as file:
         COMPANY_IDENTIFIERS = json.load(file)
     # Convert keys to integers for proper comparison
     COMPANY_IDENTIFIERS = {int(k): COMPANY_IDENTIFIERS[k] for k in COMPANY_IDENTIFIERS}
