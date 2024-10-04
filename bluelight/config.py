@@ -25,7 +25,7 @@ def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
 
-def update_allowed_devices(device_address: str, name: str, manufacturer: str):
+def update_allowed_devices(device_address: str, name: str, manufacturer: str, nickname:str):
     config = load_config()
     allowed_devices = config.get('allowed_devices', [])
 
@@ -33,7 +33,8 @@ def update_allowed_devices(device_address: str, name: str, manufacturer: str):
     if device_address not in allowed_devices.keys():
         new_device = {
             "name": name,
-            "manufacturer": manufacturer
+            "manufacturer": manufacturer,
+            "nickname": nickname
         }
         allowed_devices[device_address] = new_device
         config['allowed_devices'] = allowed_devices

@@ -210,12 +210,16 @@ async def pair_new_controller():
                     # Run `bluetoothctl` command to set device as trusted
                     subprocess.run(["bluetoothctl", "trust", selected_device['address']], check=True)
                     console.print(f"[bold green]Device {selected_device['address']} is now trusted![/bold green]")
-                    update_allowed_devices(selected_device['address'], selected_device['name'], selected_device['manufacturer'])
+                    # Prompt user for a nickname after successful pairing
+                    nickname = typer.prompt(f"This device paired successfully! Would you like to give it a nickname? (Leave blank to skip)")
+    
+                    update_allowed_devices(selected_device['address'], selected_device['name'], selected_device['manufacturer'], nickname)
                 except subprocess.CalledProcessError as e:
                     console.print(f"[bold red]Failed to set {selected_device['address']} as trusted. Error: {e}[/bold red]")
             else:
                 console.print(f"[bold red]Failed to connect to {selected_device['name']}.[/bold red]")
-
+        
+    
     # Run the connection function
     await connect()
 
