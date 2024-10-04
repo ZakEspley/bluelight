@@ -7,10 +7,70 @@ from bluelight.config import load_config, save_config
 from bluelight.bluetooth_monitor import monitor_bluetooth, pair_new_controller
 from rich.console import Console
 from rich.prompt import Prompt
+from pathlib import Path
+from bluelight.utils import get_original_user_info
 
 # Create a Typer application instance
 app = typer.Typer()
 console = Console()
+user, home_dir, uid = get_original_user_info()
+# Paths to systemd files
+SERVICE_FILE_PATH = "/etc/systemd/system/bluelight.service"
+SERVICE_CONTENT = f"""
+[Unit]
+Description=Bluelight Daemon Service
+After=network.target
+
+[Service]
+ExecStart=bluelight run
+Restart=always
+User={user}
+Group={user}
+WorkingDirectory={home_dir}
+Environment=XDG_RUNTIME_DIR=/run/user/{uid}
+#AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+#NoNewPrivileges=true
+BusName=bluelight
+
+[Install]
+WantedBy=default.target
+"""
+
+
+@app.command()
+def daemon_start():
+    """
+    Creates a systemd service to run bluelight as a daemon on startup.
+    """
+    service_file = Path(SERVICE_FILE_PATH)
+    
+    # Write the service file content
+    with open(service_file, 'w') as f:
+        f.write(SERVICE_CONTENT)
+    
+    # Set permissions and enable service
+    subprocess.run(["sudo", "chmod", "644", SERVICE_FILE_PATH], check=True)
+    subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+    subprocess.run(["sudo", "systemctl", "enable", "bluelight.service"], check=True)
+    subprocess.run(["sudo", "systemctl", "start", "bluelight.service"], check=True)
+    
+    typer.echo("Bluelight service created and started successfully.")
+
+@app.command()
+def daemon_stop():
+    """
+    Removes the systemd service for bluelight and disables it from startup.
+    """
+    subprocess.run(["sudo", "systemctl", "stop", "bluelight.service"], check=True)
+    subprocess.run(["sudo", "systemctl", "disable", "bluelight.service"], check=True)
+    service_file = Path(SERVICE_FILE_PATH)
+    
+    # Remove the service file
+    if service_file.exists():
+        service_file.unlink()
+    
+    subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+    typer.echo("Bluelight service stopped and removed successfully.")
 
 @app.command()
 def timeout(seconds: int):
