@@ -112,8 +112,9 @@ def unpair():
     for mac_address, device_info in allowed_devices.items():
         display_name = device_info["name"]
         manufacturer_name = device_info["manufacturer"]
+        nickname = device_info["nickname"]
         device_list.append(mac_address)
-        console.print(f"[{idx}] {display_name} : {manufacturer_name} : ({mac_address})")
+        console.print(f"[{idx}] [bold]{nickname}[/bold] : {display_name} : {manufacturer_name} : ({mac_address})")
         idx += 1
     # Add an option to quit
     console.print(f"[{idx}] [bold red]Quit[/bold red]")

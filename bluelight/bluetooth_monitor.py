@@ -10,7 +10,7 @@ import typer
 from rich.prompt import Prompt
 from rich.console import Console
 from bluelight.config import load_config, update_allowed_devices
-from bleak import BleakClient, BleakScanner
+from bleak import BleakClient, BleakScanner, BleakError
 import json
 from importlib import resources
 
@@ -200,26 +200,34 @@ async def pair_new_controller():
         console.print(f"[bold green]Connecting to {selected_device['name']} ({selected_device['address']})...[/bold green]")
 
         # Attempt to connect to the selected device
-        async with BleakClient(selected_device['address']) as client:
-            if client.is_connected:
-                console.print(f"[bold green]Successfully connected to {selected_device['name']}![/bold green]")
+        try:
+            async with BleakClient(selected_device['address']) as client:
+                if client.is_connected:
+                    console.print(f"[bold green]Successfully connected to {selected_device['name']}![/bold green]")
 
-                # Mark the device as trusted using `bluetoothctl`
-                try:
-                    console.print(f"[bold green]Setting {selected_device['address']} as a trusted device...[/bold green]")
-                    # Run `bluetoothctl` command to set device as trusted
-                    subprocess.run(["bluetoothctl", "trust", selected_device['address']], check=True)
-                    console.print(f"[bold green]Device {selected_device['address']} is now trusted![/bold green]")
-                    # Prompt user for a nickname after successful pairing
-                    nickname = typer.prompt(f"This device paired successfully! Would you like to give it a nickname? (Leave blank to skip)")
-    
-                    update_allowed_devices(selected_device['address'], selected_device['name'], selected_device['manufacturer'], nickname)
-                except subprocess.CalledProcessError as e:
-                    console.print(f"[bold red]Failed to set {selected_device['address']} as trusted. Error: {e}[/bold red]")
-            else:
-                console.print(f"[bold red]Failed to connect to {selected_device['name']}.[/bold red]")
+                    # Mark the device as trusted using `bluetoothctl`
+                    try:
+                        console.print(f"[bold green]Setting {selected_device['address']} as a trusted device...[/bold green]")
+                        # Run `bluetoothctl` command to set device as trusted
+                        subprocess.run(["bluetoothctl", "trust", selected_device['address']], check=True)
+                        console.print(f"[bold green]Device {selected_device['address']} is now trusted![/bold green]")
+                        # Prompt user for a nickname after successful pairing
+                        nickname = Prompt.ask(f"This device paired successfully! Would you like to give it a nickname(25 char max)? (Leave blank to skip)")
+                        if not nickname:
+                            nickname = "No nickname"
+                        nickname = nickname[:25]
+                        update_allowed_devices(selected_device['address'], selected_device['name'], selected_device['manufacturer'], nickname)
+                    except subprocess.CalledProcessError as e:
+                        console.print(f"[bold red]Failed to set {selected_device['address']} as trusted. Error: {e}[/bold red]")
+                else:
+                    console.print(f"[bold red]Failed to connect to {selected_device['name']}.[/bold red]")
+        except BleakError as e:
+            console.print("[bold red]There was an issue making the connection to your device.\nMake sure your device is in discovery mode and try again.[/bold red]")
+            raise typer.Exit()
+        except Exception as e:
+            console.print(f"[bold red]Something else went wrong. Try again. The error is:\n{e}")
+            raise typer.exit()
         
-    
     # Run the connection function
     await connect()
 
