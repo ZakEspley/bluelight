@@ -8,14 +8,15 @@ from bluelight.bluetooth_monitor import monitor_bluetooth, pair_new_controller
 from rich.console import Console
 from rich.prompt import Prompt
 from pathlib import Path
-from bluelight.utils import get_original_user_info
+from bluelight.utils import get_original_user_info, is_service_active, is_service_enabled
 
 # Create a Typer application instance
 app = typer.Typer()
 console = Console()
 user, home_dir, uid = get_original_user_info()
 # Paths to systemd files
-SERVICE_FILE_PATH = "/etc/systemd/system/bluelight.service"
+SERVICE_NAME = "bluelight.service"
+SERVICE_FILE_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
 SERVICE_CONTENT = f"""
 [Unit]
 Description=Bluelight Daemon Service
@@ -42,6 +43,10 @@ def daemon_start():
     """
     Creates a systemd service to run bluelight as a daemon on startup.
     """
+    # Check if the service is already enabled
+    if is_service_enabled(SERVICE_NAME):
+        typer.echo(f"Service '{SERVICE_NAME}' is already set up and enabled.")
+        return
     service_file = Path(SERVICE_FILE_PATH)
     
     # Write the service file content
@@ -59,18 +64,31 @@ def daemon_start():
 @app.command()
 def daemon_stop():
     """
-    Removes the systemd service for bluelight and disables it from startup.
+    Removes the systemd service for bluelight and disables it from startup if it exists.
     """
-    subprocess.run(["sudo", "systemctl", "stop", "bluelight.service"], check=True)
-    subprocess.run(["sudo", "systemctl", "disable", "bluelight.service"], check=True)
+
+    # Check if the service is active before stopping it
+    if is_service_active(SERVICE_NAME):
+        subprocess.run(["sudo", "systemctl", "stop", SERVICE_NAME], check=True)
+        typer.echo(f"Service '{SERVICE_NAME}' stopped successfully.")
+    else:
+        typer.echo(f"Service '{SERVICE_NAME}' is not currently running.")
+
+    # Check if the service is enabled before disabling it
+    if is_service_enabled(SERVICE_NAME):
+        subprocess.run(["sudo", "systemctl", "disable", SERVICE_NAME], check=True)
+        typer.echo(f"Service '{SERVICE_NAME}' disabled successfully.")
+    else:
+        typer.echo(f"Service '{SERVICE_NAME}' is not enabled.")
+
+    # Remove the service file if it exists
     service_file = Path(SERVICE_FILE_PATH)
-    
-    # Remove the service file
     if service_file.exists():
         service_file.unlink()
-    
-    subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
-    typer.echo("Bluelight service stopped and removed successfully.")
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+        typer.echo(f"Service file '{SERVICE_FILE_PATH}' removed successfully.")
+    else:
+        typer.echo(f"Service file '{SERVICE_FILE_PATH}' does not exist.")
 
 @app.command()
 def timeout(seconds: int):
@@ -142,7 +160,30 @@ def unpair():
         save_config(config)
     except subprocess.CalledProcessError as e:
         console.print(f"[bold red]Failed to remove {selected_name} ({selected_address}). Error: {e}[/bold red]")
+
+@app.command()
+def list():
+    """
+    Lists all paired Bluetooth controllers known by bluelight.
+    """
+    # Load the current configuration
+    config = load_config()
     
+    # Retrieve the list of paired devices
+    paired_devices = config.get("allowed_devices", {})
+
+    # If there are no paired devices, inform the user
+    if not paired_devices:
+        typer.echo("No paired Bluetooth controllers found.")
+        return
+
+    # Display each paired device with its nickname (if available)
+    typer.echo("Paired Bluetooth Controllers:")
+    for mac_address, device_info in paired_devices.items():
+        display_name = device_info.get("name")
+        manufacturer_name = device_info.get("manufacturer")
+        nickname = device_info.get("nickname")
+        console.print(f"    [bold]{nickname}[/bold] : {display_name} : {manufacturer_name} : ({mac_address})")
 
 @app.command()
 def run():

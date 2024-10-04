@@ -2,6 +2,7 @@ import getpass
 import pwd
 from pathlib import Path
 import os
+import subprocess
 
 def get_original_user_info() -> tuple:
     """
@@ -18,3 +19,29 @@ def get_original_user_info() -> tuple:
         home_dir = str(Path.home())
     uid = pwd.getpwnam(original_user).pw_uid
     return original_user, home_dir, uid
+
+def is_service_active(service_name: str) -> bool:
+    """
+    Check if a systemd service is currently active (running).
+    
+    Args:
+        service_name (str): Name of the service to check.
+    
+    Returns:
+        bool: True if the service is active, False otherwise.
+    """
+    result = subprocess.run(["systemctl", "is-active", service_name], capture_output=True, text=True)
+    return result.stdout.strip() == "active"
+
+def is_service_enabled(service_name: str) -> bool:
+    """
+    Check if a systemd service is currently enabled.
+    
+    Args:
+        service_name (str): Name of the service to check.
+    
+    Returns:
+        bool: True if the service is enabled, False otherwise.
+    """
+    result = subprocess.run(["systemctl", "is-enabled", service_name], capture_output=True, text=True)
+    return result.stdout.strip() == "enabled"
